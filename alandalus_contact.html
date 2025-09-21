@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام التواصل المباشر - مدارس الأندلس الأهلية بخميس مشيط</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+        // Firebase modules import
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, query, onSnapshot, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firebase configuration (DO NOT MODIFY)
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        let userId = null;
+        let authReady = false;
+
+        // Set Firestore log level to debug
+        setLogLevel('debug');
+
+        // Wait for the auth state to be ready
+        onAuthStateChanged(auth, async (user) => {
+            if (!user) {
+                // Sign in anonymously if no user is authenticated
+                try {
+                    if (initialAuthToken) {
+                        await signInWithCustomToken(auth, initialAuthToken);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                } catch (error) {
+                    console.error("Error during anonymous sign-in: ", error);
+                }
+            } else {
+                userId = user.uid;
+                document.getElementById('user-id').textContent = userId;
+                authReady = true;
+                listenToFeedback();
+            }
+        });
+
+        // Function to submit feedback
+        async function submitFeedback() {
+            if (!authReady) {
+                console.error("Authentication not ready. Please wait.");
+                document.getElementById('response-message').textContent = 'الرجاء الانتظار، جاري الاتصال بالنظام...';
+                return;
+            }
+
+            const name = document.getElementById('name-input').value;
+            const stage = document.getElementById('stage-input').value;
+            const phone = document.getElementById('phone-input').value;
+            const feedback = document.getElementById('feedback-input').value;
+
+            if (!name || !stage || !feedback) {
+                document.getElementById('response-message').textContent = 'الرجاء تعبئة جميع الحقول.';
+                document.getElementById('response-message').classList.remove('text-green-500');
+                document.getElementById('response-message').classList.add('text-red-500');
+                return;
+            }
+
+            try {
+                await addDoc(collection(db, `/artifacts/${appId}/public/data/feedback`), {
+                    name,
+                    stage,
+                    phone,
+                    feedback,
+                    timestamp: serverTimestamp(),
+                    userId: userId
+                });
+                document.getElementById('response-message').textContent = 'تم إرسال اقتراحك بنجاح. شكرًا لك!';
+                document.getElementById('response-message').classList.remove('text-red-500');
+                document.getElementById('response-message').classList.add('text-green-500');
+                
+                // Clear the form inputs after successful submission
+                document.getElementById('name-input').value = '';
+                document.getElementById('stage-input').value = '';
+                document.getElementById('phone-input').value = '';
+                document.getElementById('feedback-input').value = '';
+
+            } catch (e) {
+                console.error("Error adding document: ", e);
+                document.getElementById('response-message').textContent = 'حدث خطأ أثناء الإرسال. الرجاء المحاولة مرة أخرى.';
+                document.getElementById('response-message').classList.remove('text-green-500');
+                document.getElementById('response-message').classList.add('text-red-500');
+            }
+        }
+
+        // Function to listen for real-time feedback updates
+        function listenToFeedback() {
+            if (!authReady) return;
+            
+            const q = query(collection(db, `/artifacts/${appId}/public/data/feedback`), orderBy('timestamp', 'desc'));
+
+            onSnapshot(q, (querySnapshot) => {
+                const feedbackList = document.getElementById('feedback-list');
+                feedbackList.innerHTML = '';
+                querySnapshot.forEach((doc) => {
+                    const data = doc.data();
+                    const item = document.createElement('div');
+                    item.className = 'bg-gray-100 p-4 rounded-xl shadow-inner mb-4';
+                    item.innerHTML = `
+                        <div class="flex items-center space-x-2 space-x-reverse mb-2">
+                            <span class="font-bold text-gray-800">${data.name}</span>
+                            <span class="text-sm text-gray-500">- ${data.stage}</span>
+                        </div>
+                        <p class="text-gray-700 leading-relaxed">${data.feedback}</p>
+                        ${data.phone ? `<p class="text-sm text-gray-500 mt-2">رقم الجوال: ${data.phone}</p>` : ''}
+                    `;
+                    feedbackList.appendChild(item);
+                });
+            }, (error) => {
+                console.error("Error listening to feedback: ", error);
+            });
+        }
+        
+        // Expose submitFeedback to the global scope
+        window.submitFeedback = submitFeedback;
+
+    </script>
+</head>
+<body class="bg-gradient-to-br from-green-50 to-emerald-100 min-h-screen font-sans p-6">
+
+    <div class="max-w-4xl mx-auto bg-white rounded-3xl shadow-2xl overflow-hidden md:flex">
+
+        <!-- Right side (Form) -->
+        <div class="md:w-1/2 p-8 md:p-12 flex flex-col justify-center">
+            <h1 class="text-4xl font-extrabold text-green-700 mb-2 text-right">نظام التواصل المباشر</h1>
+            <p class="text-gray-600 text-lg mb-8 text-right">نرحب بآرائكم ومقترحاتكم لتعزيز تجربة طلابنا في مدارس الأندلس الأهلية بخميس مشيط.</p>
+            
+            <form id="feedback-form" onsubmit="event.preventDefault(); submitFeedback();">
+                <div class="mb-5">
+                    <label for="name-input" class="block text-gray-700 font-semibold mb-2 text-right">الاسم</label>
+                    <input type="text" id="name-input" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 transition duration-200" placeholder="الاسم الكامل">
+                </div>
+                <div class="mb-5">
+                    <label for="stage-input" class="block text-gray-700 font-semibold mb-2 text-right">المرحلة الدراسية</label>
+                    <input type="text" id="stage-input" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 transition duration-200" placeholder="مثال: المرحلة الابتدائية، الصف الخامس">
+                </div>
+                <div class="mb-5">
+                    <label for="phone-input" class="block text-gray-700 font-semibold mb-2 text-right">رقم الجوال (اختياري)</label>
+                    <input type="tel" id="phone-input" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 transition duration-200" placeholder="مثال: 05xxxxxxx">
+                </div>
+                <div class="mb-6">
+                    <label for="feedback-input" class="block text-gray-700 font-semibold mb-2 text-right">اقتراحك أو استفسارك</label>
+                    <textarea id="feedback-input" rows="4" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 transition duration-200 resize-none" placeholder="اكتب اقتراحك أو استفسارك هنا..."></textarea>
+                </div>
+                <p id="response-message" class="text-sm text-center font-medium mb-4 text-gray-500"></p>
+                <div class="text-center">
+                    <button type="submit" class="w-full bg-green-600 text-white font-bold py-3 px-6 rounded-xl hover:bg-green-700 transition duration-300 shadow-lg transform hover:scale-105">إرسال</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Left side (Feedback List) -->
+        <div class="md:w-1/2 bg-gray-50 p-8 md:p-12">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6 text-right border-b pb-2 border-gray-200">الآراء والمقترحات الأخيرة</h2>
+            <div id="feedback-list" class="space-y-4">
+                <p class="text-center text-gray-500">
+                    <span id="user-id" class="font-mono text-xs block mb-2"></span>
+                    <span id="loading-message">جاري تحميل الاستفسارات...</span>
+                </p>
+            </div>
+        </div>
+
+    </div>
+
+</body>
+</html>
